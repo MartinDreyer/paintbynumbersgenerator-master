@@ -3,8 +3,13 @@ import { SmkArtwork } from "./smkClient";
 import { GenerateResult } from "./generate";
 import { Settings } from "../../src/settings";
 
+/**
+ * Paintings whose puzzle has actually been scheduled into rotation (i.e. shown, or
+ * guaranteed to be shown, to end users). A painting that was only generated/previewed as
+ * a draft and never scheduled is still fair game and won't show up here.
+ */
 export async function listUsedSmkObjectNumbers(): Promise<Set<string>> {
-    const { data, error } = await supabase.from("paintings").select("smk_object_number");
+    const { data, error } = await supabase.from("paintings").select("smk_object_number").not("used_at", "is", null);
     if (error) throw error;
     return new Set((data || []).map((row) => row.smk_object_number as string));
 }
@@ -90,6 +95,7 @@ export async function publishPuzzle(input: PublishPuzzleInput): Promise<{ id: st
 
 export interface ScheduleInput {
     puzzleId: string;
+    paintingId: string;
     cadence: "daily" | "weekly";
     activeFrom: string;
     activeUntil: string;
@@ -107,7 +113,38 @@ export async function scheduleRotation(input: ScheduleInput): Promise<{ id: stri
         .select("id")
         .single();
     if (error) throw error;
+
+    // Scheduling is what actually commits a painting to being shown to end users, so
+    // that's the moment it should stop being offered as a candidate for new puzzles.
+    const { error: usedError } = await supabase
+        .from("paintings")
+        .update({ used_at: new Date().toISOString() })
+        .eq("id", input.paintingId);
+    if (usedError) throw usedError;
+
     return data;
+}
+
+/**
+ * Where the next daily rotation slot should start: right after the latest scheduled
+ * window's end, or now if nothing is scheduled (or the schedule has already lapsed).
+ * `coversNow` tells the caller whether a puzzle is currently live, so a startup/interval
+ * check can skip preparing a new one when one's already showing.
+ */
+export async function getNextDailyWindow(): Promise<{ activeFrom: Date; activeUntil: Date; coversNow: boolean }> {
+    const { data, error } = await supabase
+        .from("rotation_schedule")
+        .select("active_until")
+        .order("active_until", { ascending: false })
+        .limit(1);
+    if (error) throw error;
+
+    const now = new Date();
+    const latestEnd = data && data[0] ? new Date(data[0].active_until as string) : null;
+    const coversNow = latestEnd !== null && latestEnd > now;
+    const activeFrom = coversNow ? (latestEnd as Date) : now;
+    const activeUntil = new Date(activeFrom.getTime() + 24 * 60 * 60 * 1000);
+    return { activeFrom, activeUntil, coversNow };
 }
 
 export async function listSchedule() {

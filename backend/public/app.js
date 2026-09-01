@@ -5,6 +5,7 @@
   const els = {
     q: document.getElementById("q"),
     searchBtn: document.getElementById("searchBtn"),
+    randomBtn: document.getElementById("randomBtn"),
     results: document.getElementById("results"),
     selectedArtwork: document.getElementById("selectedArtwork"),
     generateBtn: document.getElementById("generateBtn"),
@@ -18,19 +19,13 @@
     activeFrom: document.getElementById("activeFrom"),
     activeUntil: document.getElementById("activeUntil"),
     scheduleBody: document.querySelector("#scheduleTable tbody"),
+    dailyRunBtn: document.getElementById("dailyRunBtn"),
+    dailyStatus: document.getElementById("dailyStatus"),
   };
 
-  async function search() {
-    els.results.innerHTML = '<li class="muted">Searching…</li>';
-    const params = new URLSearchParams({ q: els.q.value, rows: "24" });
-    const res = await fetch(`/api/smk/search?${params.toString()}`);
-    const data = await res.json();
-    if (data.error) {
-      els.results.innerHTML = `<li class="muted">${data.error}</li>`;
-      return;
-    }
+  function renderResults(items) {
     els.results.innerHTML = "";
-    for (const item of data.items) {
+    for (const item of items) {
       const li = document.createElement("li");
       li.className = "card";
       li.innerHTML = `
@@ -43,6 +38,29 @@
       li.addEventListener("click", () => selectArtwork(item));
       els.results.appendChild(li);
     }
+  }
+
+  async function search() {
+    els.results.innerHTML = '<li class="muted">Searching…</li>';
+    const params = new URLSearchParams({ q: els.q.value, rows: "24" });
+    const res = await fetch(`/api/smk/search?${params.toString()}`);
+    const data = await res.json();
+    if (data.error) {
+      els.results.innerHTML = `<li class="muted">${data.error}</li>`;
+      return;
+    }
+    renderResults(data.items);
+  }
+
+  async function randomSuggestions() {
+    els.results.innerHTML = '<li class="muted">Picking random unused paintings…</li>';
+    const res = await fetch("/api/smk/random?count=12");
+    const data = await res.json();
+    if (data.error) {
+      els.results.innerHTML = `<li class="muted">${data.error}</li>`;
+      return;
+    }
+    renderResults(data.items);
   }
 
   function selectArtwork(item) {
@@ -141,10 +159,28 @@
     }
   }
 
+  async function runDailyNow() {
+    els.dailyRunBtn.disabled = true;
+    els.dailyStatus.textContent = "Preparing (picking a painting, generating, publishing)…";
+    try {
+      const res = await fetch("/api/daily/run", { method: "POST" });
+      const data = await res.json();
+      if (data.error) throw new Error(data.error);
+      els.dailyStatus.textContent = `Prepared "${data.artwork.title}" — puzzle ${data.puzzleId}, live ${new Date(data.activeFrom).toLocaleString()} → ${new Date(data.activeUntil).toLocaleString()}.`;
+      loadSchedule();
+    } catch (err) {
+      els.dailyStatus.textContent = `Error: ${err.message}`;
+    } finally {
+      els.dailyRunBtn.disabled = false;
+    }
+  }
+
   els.searchBtn.addEventListener("click", search);
   els.q.addEventListener("keydown", (e) => { if (e.key === "Enter") search(); });
+  els.randomBtn.addEventListener("click", randomSuggestions);
   els.generateBtn.addEventListener("click", generate);
   els.publishBtn.addEventListener("click", publish);
+  els.dailyRunBtn.addEventListener("click", runDailyNow);
 
   search();
   loadSchedule();

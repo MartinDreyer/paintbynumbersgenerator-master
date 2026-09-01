@@ -47,6 +47,7 @@
     <div class="searchRow">
       <input id="q" placeholder="search e.g. Krøyer, sommer..." />
       <button id="searchBtn">Search</button>
+      <button id="randomBtn" title="Suggest unused paintings at random">🎲 Random</button>
     </div>
     <ul class="results" id="results"></ul>
   </section>
@@ -83,6 +84,11 @@
       <thead><tr><th>Painting</th><th>From</th><th>Until</th></tr></thead>
       <tbody></tbody>
     </table>
+
+    <h2 style="margin-top:20px;">Daily automation</h2>
+    <p class="muted">The server checks daily and auto-prepares a new puzzle (random unused painting → generate → publish → schedule) whenever nothing currently covers "now". You can also trigger it manually:</p>
+    <button id="dailyRunBtn">Run daily preparation now</button>
+    <div id="dailyStatus" class="muted" style="margin-top:8px;"></div>
   </section>
 </main>
 <script src="app.js"></script>
