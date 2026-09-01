@@ -45,7 +45,7 @@ function mapItem(item: SmkSearchItem): SmkArtwork | null {
 export async function searchPaintings(keys: string, rows = 20, offset = 0): Promise<{ found: number; items: SmkArtwork[] }> {
     const params = new URLSearchParams({
         keys: keys || "maleri",
-        filters: "[public_domain:true],[has_image:true]",
+        filters: "[public_domain:true],[has_image:true],[creator_nationality:Danish]",
         rows: String(rows),
         offset: String(offset),
         lang: "en",
