@@ -2,9 +2,10 @@ import "dotenv/config";
 import express from "express";
 import path from "path";
 import { randomUUID } from "crypto";
-import { downloadImage, getPaintingByObjectNumber, searchPaintings, SmkArtwork } from "./smkClient";
+import { downloadImage, getPaintingByObjectNumber, pickRandomArtworks, searchPaintings, SmkArtwork } from "./smkClient";
 import { DEFAULT_SVG_OPTIONS, GenerateResult, generatePuzzle } from "./generate";
-import { ensurePainting, listSchedule, listUsedSmkObjectNumbers, publishPuzzle, scheduleRotation } from "./publish";
+import { ensurePainting, getNextDailyWindow, listSchedule, listUsedSmkObjectNumbers, publishPuzzle, scheduleRotation } from "./publish";
+import { runDailyPreparation } from "./daily";
 import { Settings } from "../../src/settings";
 
 const app = express();
@@ -43,6 +44,17 @@ app.get("/api/smk/search", async (req, res) => {
     }
 });
 
+app.get("/api/smk/random", async (req, res) => {
+    try {
+        const count = Math.min(Math.max(Number(req.query.count) || 5, 1), 20);
+        const used = await listUsedSmkObjectNumbers();
+        const items = await pickRandomArtworks(used, count);
+        res.json({ items });
+    } catch (err) {
+        res.status(500).json({ error: (err as Error).message });
+    }
+});
+
 app.post("/api/generate", async (req, res) => {
     try {
         const objectNumber = String(req.body.objectNumber || "");
@@ -64,9 +76,7 @@ app.post("/api/generate", async (req, res) => {
         const settings = Object.assign(new Settings(), { resizeImageWidth: 640, resizeImageHeight: 640 }, req.body.settings || {});
         const svgOptions = Object.assign({ ...DEFAULT_SVG_OPTIONS }, req.body.svgOptions || {});
 
-        const imageRes = await fetch(artwork.imageUrl);
-        const contentType = imageRes.headers.get("content-type") || "image/jpeg";
-        const buffer = await downloadImage(artwork.imageUrl);
+        const { buffer, contentType } = await downloadImage(artwork.imageUrl);
 
         const generated = await generatePuzzle(buffer, settings, svgOptions);
 
@@ -116,6 +126,7 @@ app.post("/api/publish", async (req, res) => {
         if (status === "published" && req.body.cadence && req.body.activeFrom && req.body.activeUntil) {
             schedule = await scheduleRotation({
                 puzzleId: puzzle.id,
+                paintingId: painting.id,
                 cadence: req.body.cadence,
                 activeFrom: req.body.activeFrom,
                 activeUntil: req.body.activeUntil,
@@ -137,7 +148,35 @@ app.get("/api/schedule", async (_req, res) => {
     }
 });
 
+app.post("/api/daily/run", async (_req, res) => {
+    try {
+        res.json(await runDailyPreparation());
+    } catch (err) {
+        res.status(500).json({ error: (err as Error).message });
+    }
+});
+
+const DAY_MS = 24 * 60 * 60 * 1000;
+
+// Self-sustaining supply of puzzles: on startup and then once a day, check whether the
+// rotation schedule currently covers "now" and, if not, pick+generate+publish+schedule a
+// new one. Checking coverage (rather than unconditionally running every interval tick)
+// keeps this idempotent across restarts and manual publishes within the same day.
+async function ensureDailyPuzzleCoverage(): Promise<void> {
+    try {
+        const window = await getNextDailyWindow();
+        if (window.coversNow) return;
+        console.log("No puzzle currently scheduled — preparing one now.");
+        const result = await runDailyPreparation();
+        console.log(`Prepared puzzle ${result.puzzleId} ("${result.artwork.title}") scheduled ${result.activeFrom} → ${result.activeUntil}.`);
+    } catch (err) {
+        console.error("Daily puzzle preparation failed:", err);
+    }
+}
+
 const port = Number(process.env.PORT || 4000);
 app.listen(port, () => {
     console.log(`Paint-by-numbers control panel: http://127.0.0.1:${port}`);
+    ensureDailyPuzzleCoverage();
+    setInterval(ensureDailyPuzzleCoverage, DAY_MS);
 });

@@ -68,11 +68,35 @@ export async function getPaintingByObjectNumber(objectNumber: string): Promise<S
     return item ? mapItem(item) : null;
 }
 
-export async function downloadImage(imageUrl: string): Promise<Buffer> {
+export async function downloadImage(imageUrl: string): Promise<{ buffer: Buffer; contentType: string }> {
     const res = await fetch(imageUrl);
     if (!res.ok) {
         throw new Error(`Failed to download image: ${res.status} ${res.statusText}`);
     }
+    const contentType = res.headers.get("content-type") || "image/jpeg";
     const arrayBuffer = await res.arrayBuffer();
-    return Buffer.from(arrayBuffer);
+    return { buffer: Buffer.from(arrayBuffer), contentType };
+}
+
+/**
+ * Picks up to `count` distinct public-domain paintings the caller hasn't seen before
+ * (`excludeObjectNumbers`), by probing random offsets into the SMK search results rather
+ * than paging through everything — cheap regardless of how large the collection is.
+ */
+export async function pickRandomArtworks(excludeObjectNumbers: Set<string>, count: number): Promise<SmkArtwork[]> {
+    const probe = await searchPaintings("maleri", 1, 0);
+    if (probe.found === 0) return [];
+
+    const picked: SmkArtwork[] = [];
+    const pickedNumbers = new Set<string>();
+    const maxAttempts = count * 8;
+    for (let attempt = 0; attempt < maxAttempts && picked.length < count; attempt++) {
+        const offset = Math.floor(Math.random() * probe.found);
+        const { items } = await searchPaintings("maleri", 1, offset);
+        const item = items[0];
+        if (!item || excludeObjectNumbers.has(item.objectNumber) || pickedNumbers.has(item.objectNumber)) continue;
+        pickedNumbers.add(item.objectNumber);
+        picked.push(item);
+    }
+    return picked;
 }
