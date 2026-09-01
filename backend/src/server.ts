@@ -57,7 +57,11 @@ app.post("/api/generate", async (req, res) => {
             return;
         }
 
-        const settings = Object.assign(new Settings(), req.body.settings || {});
+        // SMK originals can be several thousand px wide; Settings' own default resize cap
+        // (1024) still leaves generation taking minutes. Control-panel previews favor a
+        // fast turnaround over max detail, so start from a tighter cap here and let an
+        // explicit settings.resizeImageWidth/Height in the request override it.
+        const settings = Object.assign(new Settings(), { resizeImageWidth: 640, resizeImageHeight: 640 }, req.body.settings || {});
         const svgOptions = Object.assign({ ...DEFAULT_SVG_OPTIONS }, req.body.svgOptions || {});
 
         const imageRes = await fetch(artwork.imageUrl);
