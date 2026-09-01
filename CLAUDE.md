@@ -2,6 +2,15 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
+## Roadmap and TODO live in pnb-app
+
+`ROADMAP.md` and `TODO.md` in the sibling `pnb-app` repo are the canonical, cross-repo
+tracker for the whole platform (this repo's `backend/`, plus `pnb-app` and
+`pnb-database`) — don't create a separate copy here. After shipping a change to
+`backend/` or deciding on next steps for it, update those two files in `pnb-app`: append
+a dated bullet to `ROADMAP.md`'s "Done", and check off / append to `TODO.md` (append
+rather than reword/reorder existing entries, so parallel edits merge cleanly).
+
 ## Source restored from upstream
 
 This fork's initial commit shipped without the actual TypeScript implementation (only config/assets were checked in). The real source has since been restored from `drake7707/paintbynumbersgenerator@master` on GitHub into `src/` and `src-cli/main.ts`, and confirmed to compile and run end-to-end against `src-cli/testinput.png` (see "Verifying the CLI still works" below). `dist/index.html`'s bundled web build (`scripts/main.js`) is a separate build artifact, not required for the CLI/backend path.
