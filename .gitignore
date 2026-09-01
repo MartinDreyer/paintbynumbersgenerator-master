@@ -1,3 +1,9 @@
 node_modules
 *.js
 *.map
+
+# backend/public/app.js is hand-written (not a *.js build artifact like the rest of this repo)
+!backend/public/*.js
+
+backend/dist
+backend/.env
