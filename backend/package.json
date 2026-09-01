@@ -1,0 +1,22 @@
+{
+  "name": "pnb-generator-backend",
+  "version": "1.0.0",
+  "description": "Generator control panel: pulls Danish paintings from the SMK API, runs the paint-by-numbers pipeline, publishes puzzles to Supabase.",
+  "private": true,
+  "scripts": {
+    "build": "tsc",
+    "start": "node dist/backend/src/server.js",
+    "dev": "tsc && node dist/backend/src/server.js"
+  },
+  "dependencies": {
+    "@supabase/supabase-js": "^2.45.0",
+    "canvas": "^3.2.3",
+    "dotenv": "^16.4.5",
+    "express": "^4.19.2"
+  },
+  "devDependencies": {
+    "@types/express": "^4.17.21",
+    "@types/node": "^20.14.0",
+    "typescript": "^5.4.5"
+  }
+}

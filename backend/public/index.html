@@ -1,0 +1,90 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<title>Paint by Numbers — Control Panel</title>
+<style>
+  :root { --bg:#0f1115; --panel:#161a24; --text:#e9eefc; --muted:#9aa6c0; --accent:#6ea8ff; --stroke:rgba(255,255,255,0.1); }
+  * { box-sizing: border-box; }
+  body { margin:0; background:var(--bg); color:var(--text); font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Arial; }
+  header { padding:16px 20px; border-bottom:1px solid var(--stroke); }
+  h1 { font-size:18px; margin:0; }
+  main { display:grid; grid-template-columns: 360px 1fr 320px; gap:16px; padding:16px; align-items:start; }
+  section { background:var(--panel); border:1px solid var(--stroke); border-radius:10px; padding:14px; }
+  h2 { font-size:13px; text-transform:uppercase; letter-spacing:.05em; color:var(--muted); margin:0 0 10px; }
+  input, select, button, textarea { background:#0f1320; color:var(--text); border:1px solid var(--stroke); border-radius:8px; padding:8px 10px; font-size:13px; }
+  button { cursor:pointer; }
+  button.primary { background:var(--accent); color:#08121f; border-color:var(--accent); font-weight:600; }
+  button:disabled { opacity:.5; cursor:not-allowed; }
+  .row { display:flex; gap:8px; margin-bottom:8px; }
+  .searchRow { display:flex; gap:8px; margin-bottom:12px; }
+  .searchRow input { flex:1; }
+  ul.results { list-style:none; margin:0; padding:0; max-height:70vh; overflow:auto; display:flex; flex-direction:column; gap:8px; }
+  .card { border:1px solid var(--stroke); border-radius:8px; padding:8px; display:flex; gap:8px; }
+  .card img { width:56px; height:56px; object-fit:cover; border-radius:6px; flex-shrink:0; }
+  .card .meta { flex:1; min-width:0; }
+  .card .meta .title { font-size:13px; font-weight:600; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .card .meta .artist { font-size:12px; color:var(--muted); }
+  .badge { font-size:10px; padding:2px 6px; border-radius:999px; background:rgba(255,255,255,.08); color:var(--muted); }
+  .badge.used { background:#3a2020; color:#ffb4b4; }
+  label { font-size:12px; color:var(--muted); display:block; margin-bottom:2px; }
+  .field { margin-bottom:8px; }
+  #svgPreview { width:100%; aspect-ratio:1; overflow:hidden; border-radius:8px; background:#fff; display:flex; align-items:center; justify-content:center; }
+  #svgPreview svg { width:100%; height:100%; }
+  .swatches { display:flex; flex-wrap:wrap; gap:4px; margin-top:10px; }
+  .swatch { width:22px; height:22px; border-radius:5px; border:1px solid rgba(255,255,255,.2); }
+  .muted { color:var(--muted); font-size:12px; }
+  table { width:100%; border-collapse: collapse; font-size:12px; }
+  td, th { text-align:left; padding:4px 2px; border-bottom:1px solid var(--stroke); }
+  #genStatus, #pubStatus { font-size:12px; color:var(--muted); margin-top:8px; min-height:16px; }
+</style>
+</head>
+<body>
+<header><h1>Paint by Numbers — generator control panel</h1></header>
+<main>
+  <section id="browse">
+    <h2>Browse SMK</h2>
+    <div class="searchRow">
+      <input id="q" placeholder="search e.g. Krøyer, sommer..." />
+      <button id="searchBtn">Search</button>
+    </div>
+    <ul class="results" id="results"></ul>
+  </section>
+
+  <section id="generate">
+    <h2>Generate</h2>
+    <div id="selectedArtwork" class="muted">Pick a painting on the left.</div>
+    <div class="field"><label>Number of colors</label><input id="nrColors" type="number" value="24" min="2" max="63" /></div>
+    <div class="field"><label>Max facets</label><input id="maxFacets" type="number" value="400" min="10" /></div>
+    <div class="field"><label>Remove facets smaller than (px)</label><input id="minFacetSize" type="number" value="20" min="1" /></div>
+    <div class="row">
+      <button id="generateBtn" class="primary" disabled>Generate puzzle</button>
+    </div>
+    <div id="genStatus"></div>
+    <div id="svgPreview"></div>
+    <div class="swatches" id="paletteSwatches"></div>
+  </section>
+
+  <section id="publish">
+    <h2>Publish</h2>
+    <div class="field"><label>Status</label>
+      <select id="status"><option value="draft">Draft</option><option value="published">Published</option></select>
+    </div>
+    <div class="field"><label>Cadence</label>
+      <select id="cadence"><option value="daily">Daily</option><option value="weekly">Weekly</option></select>
+    </div>
+    <div class="field"><label>Active from</label><input id="activeFrom" type="datetime-local" /></div>
+    <div class="field"><label>Active until</label><input id="activeUntil" type="datetime-local" /></div>
+    <button id="publishBtn" class="primary" disabled>Publish</button>
+    <div id="pubStatus"></div>
+
+    <h2 style="margin-top:20px;">Rotation schedule</h2>
+    <table id="scheduleTable">
+      <thead><tr><th>Painting</th><th>From</th><th>Until</th></tr></thead>
+      <tbody></tbody>
+    </table>
+  </section>
+</main>
+<script src="app.js"></script>
+</body>
+</html>
