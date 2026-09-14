@@ -21,6 +21,10 @@ export class Settings {
     public removeFacetsFromLargeToSmall: boolean = true;
     public maximumNumberOfFacets: number = Number.MAX_VALUE;
 
+    // Caps how many separate numbered regions may share a single palette color (e.g. so
+    // one color doesn't end up covering 150 small scattered regions). 0 = unlimited.
+    public maxFacetsPerColor: number = 0;
+
     public nrOfTimesToHalveBorderSegments: number = 2;
 
     public resizeImageIfTooLarge: boolean = true;

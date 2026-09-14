@@ -110,6 +110,13 @@ export async function generatePuzzle(
             colormapResult.imgColorIndices,
             () => undefined,
         );
+        await FacetReducer.capFacetsPerColor(
+            settings.maxFacetsPerColor,
+            colormapResult.colorsByIndex,
+            facetResult,
+            colormapResult.imgColorIndices,
+            () => undefined,
+        );
     } else {
         for (let run = 0; run < runs; run++) {
             await ColorReducer.processNarrowPixelStripCleanup(colormapResult);
@@ -118,6 +125,13 @@ export async function generatePuzzle(
                 settings.removeFacetsSmallerThanNrOfPoints,
                 settings.removeFacetsFromLargeToSmall,
                 settings.maximumNumberOfFacets,
+                colormapResult.colorsByIndex,
+                facetResult,
+                colormapResult.imgColorIndices,
+                () => undefined,
+            );
+            await FacetReducer.capFacetsPerColor(
+                settings.maxFacetsPerColor,
                 colormapResult.colorsByIndex,
                 facetResult,
                 colormapResult.imgColorIndices,

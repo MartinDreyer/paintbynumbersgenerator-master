@@ -96,7 +96,7 @@ export async function publishPuzzle(input: PublishPuzzleInput): Promise<{ id: st
 export interface ScheduleInput {
     puzzleId: string;
     paintingId: string;
-    cadence: "daily" | "weekly";
+    cadence: "daily" | "weekly" | "custom";
     activeFrom: string;
     activeUntil: string;
 }
@@ -125,13 +125,16 @@ export async function scheduleRotation(input: ScheduleInput): Promise<{ id: stri
     return data;
 }
 
+const DAY_MS = 24 * 60 * 60 * 1000;
+
 /**
- * Where the next daily rotation slot should start: right after the latest scheduled
- * window's end, or now if nothing is scheduled (or the schedule has already lapsed).
+ * Where the next rotation slot should start: right after the latest scheduled window's
+ * end, or now if nothing is scheduled (or the schedule has already lapsed). Window
+ * length is `cadenceDays` (7 = weekly, 1 = daily, or any other configured interval).
  * `coversNow` tells the caller whether a puzzle is currently live, so a startup/interval
  * check can skip preparing a new one when one's already showing.
  */
-export async function getNextDailyWindow(): Promise<{ activeFrom: Date; activeUntil: Date; coversNow: boolean }> {
+export async function getNextRotationWindow(cadenceDays: number): Promise<{ activeFrom: Date; activeUntil: Date; coversNow: boolean }> {
     const { data, error } = await supabase
         .from("rotation_schedule")
         .select("active_until")
@@ -143,15 +146,50 @@ export async function getNextDailyWindow(): Promise<{ activeFrom: Date; activeUn
     const latestEnd = data && data[0] ? new Date(data[0].active_until as string) : null;
     const coversNow = latestEnd !== null && latestEnd > now;
     const activeFrom = coversNow ? (latestEnd as Date) : now;
-    const activeUntil = new Date(activeFrom.getTime() + 24 * 60 * 60 * 1000);
+    const activeUntil = new Date(activeFrom.getTime() + cadenceDays * DAY_MS);
     return { activeFrom, activeUntil, coversNow };
 }
 
 export async function listSchedule() {
+    // Newest first: the row an admin cares most about (what's active now, what's
+    // coming up next) is always near the top instead of buried below months of past
+    // history — the UI itself marks each row past/active/upcoming (see app.js).
     const { data, error } = await supabase
         .from("rotation_schedule")
         .select("id, cadence, active_from, active_until, puzzles(id, status, paintings(title, artist))")
-        .order("active_from", { ascending: true });
+        .order("active_from", { ascending: false });
     if (error) throw error;
     return data;
+}
+
+/**
+ * Every painting pulled from SMK so far, newest first, with its usage status —
+ * "used" (used_at set, i.e. actually scheduled into rotation at some point) vs still
+ * available as a candidate for a future puzzle.
+ */
+export async function listPaintings() {
+    const { data, error } = await supabase
+        .from("paintings")
+        .select("id, title, artist, smk_object_number, used_at, fetched_at")
+        .order("fetched_at", { ascending: false });
+    if (error) throw error;
+    return data;
+}
+
+/**
+ * Puzzles that have been generated (and possibly published) but never actually put into
+ * the rotation schedule — i.e. "prepared but not used yet". Drafts from the manual
+ * Generate panel land here until published+scheduled, and a published-but-unscheduled
+ * puzzle (published without picking a date range) would too.
+ */
+export async function listUnscheduledPuzzles() {
+    const [{ data: scheduled, error: scheduleError }, { data: puzzles, error: puzzleError }] = await Promise.all([
+        supabase.from("rotation_schedule").select("puzzle_id"),
+        supabase.from("puzzles").select("id, status, created_at, paintings(title, artist)").order("created_at", { ascending: false }),
+    ]);
+    if (scheduleError) throw scheduleError;
+    if (puzzleError) throw puzzleError;
+
+    const scheduledIds = new Set((scheduled || []).map((row) => row.puzzle_id as string));
+    return (puzzles || []).filter((p) => !scheduledIds.has(p.id as string));
 }
