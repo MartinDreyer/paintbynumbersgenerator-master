@@ -37,6 +37,17 @@
   table { width:100%; border-collapse: collapse; font-size:12px; }
   td, th { text-align:left; padding:4px 2px; border-bottom:1px solid var(--stroke); }
   #genStatus, #pubStatus { font-size:12px; color:var(--muted); margin-top:8px; min-height:16px; }
+  .statusPill { font-size:10px; padding:2px 8px; border-radius:999px; font-weight:600; white-space:nowrap; }
+  .statusPill.active { background:#1f3a24; color:#7be08e; }
+  .statusPill.upcoming { background:#1f2c3a; color:#7bb8e0; }
+  .statusPill.past { background:rgba(255,255,255,.06); color:var(--muted); }
+  .statusPill.unused { background:#1f2c3a; color:#7bb8e0; }
+  .statusPill.usedPill { background:rgba(255,255,255,.06); color:var(--muted); }
+  .statusPill.draft { background:#3a3320; color:#e0c37b; }
+  tr.activeRow { background:rgba(123,224,142,.08); }
+  .wide { grid-column: 1 / -1; }
+  .twoCol { display:grid; grid-template-columns: 1fr 1fr; gap:16px; }
+  #scheduleTable td:nth-child(4), #scheduleTable th:nth-child(4) { text-align:right; }
 </style>
 </head>
 <body>
@@ -58,6 +69,7 @@
     <div class="field"><label>Number of colors</label><input id="nrColors" type="number" value="24" min="2" max="63" /></div>
     <div class="field"><label>Max facets</label><input id="maxFacets" type="number" value="400" min="10" /></div>
     <div class="field"><label>Remove facets smaller than (px)</label><input id="minFacetSize" type="number" value="20" min="1" /></div>
+    <div class="field"><label>Max regions per color (0 = unlimited)</label><input id="maxRegionsPerColor" type="number" value="0" min="0" /></div>
     <div class="row">
       <button id="generateBtn" class="primary" disabled>Generate puzzle</button>
     </div>
@@ -80,15 +92,54 @@
     <div id="pubStatus"></div>
 
     <h2 style="margin-top:20px;">Rotation schedule</h2>
+    <p class="muted">Newest first. The highlighted row is what end users see right now.</p>
     <table id="scheduleTable">
-      <thead><tr><th>Painting</th><th>From</th><th>Until</th></tr></thead>
+      <thead><tr><th>Painting</th><th>From</th><th>Until</th><th>Status</th></tr></thead>
       <tbody></tbody>
     </table>
 
-    <h2 style="margin-top:20px;">Daily automation</h2>
-    <p class="muted">The server checks daily and auto-prepares a new puzzle (random unused painting → generate → publish → schedule) whenever nothing currently covers "now". You can also trigger it manually:</p>
-    <button id="dailyRunBtn">Run daily preparation now</button>
+    <h2 style="margin-top:20px;">Automation</h2>
+    <p class="muted">The server checks hourly and auto-prepares a new puzzle (random unused painting → generate → publish → schedule) whenever nothing currently covers "now", using the cadence and settings below. You can also trigger it manually:</p>
+    <button id="dailyRunBtn">Run preparation now</button>
     <div id="dailyStatus" class="muted" style="margin-top:8px;"></div>
+  </section>
+</main>
+<main style="grid-template-columns: 1fr;">
+  <section id="settings">
+    <h2>Automated generation settings</h2>
+    <p class="muted">Controls the self-sustaining pipeline (server checks hourly and prepares a new puzzle whenever nothing currently covers "now"). Also used as the default tuning for that pipeline's generation — independent of the manual Generate panel above.</p>
+    <div class="row" style="flex-wrap:wrap; align-items:flex-end; gap:16px;">
+      <div class="field" style="margin-bottom:0;">
+        <label><input id="cfgEnabled" type="checkbox" style="width:auto; padding:0;" /> Enabled</label>
+      </div>
+      <div class="field" style="margin-bottom:0;"><label>Interval in days (7 = weekly, 1 = daily)</label><input id="cfgCadenceDays" type="number" value="7" min="1" /></div>
+      <div class="field" style="margin-bottom:0;"><label>Number of colors</label><input id="cfgNrOfColors" type="number" value="24" min="2" max="63" /></div>
+      <div class="field" style="margin-bottom:0;"><label>Max facets</label><input id="cfgMaxFacets" type="number" value="400" min="10" /></div>
+      <div class="field" style="margin-bottom:0;"><label>Remove facets smaller than (px)</label><input id="cfgMinFacetSize" type="number" value="20" min="1" /></div>
+      <div class="field" style="margin-bottom:0;"><label>Max regions per color (0 = unlimited)</label><input id="cfgMaxRegionsPerColor" type="number" value="0" min="0" /></div>
+      <button id="cfgSaveBtn" class="primary">Save settings</button>
+    </div>
+    <div id="cfgStatus" class="muted" style="margin-top:8px;"></div>
+  </section>
+</main>
+<main style="grid-template-columns: 1fr;">
+  <section class="twoCol">
+    <div>
+      <h2>Prepared but not used</h2>
+      <p class="muted">Puzzles that have been generated (and maybe published) but never actually scheduled into rotation — nobody has seen these yet.</p>
+      <table id="unscheduledTable">
+        <thead><tr><th>Painting</th><th>Puzzle status</th><th>Generated</th></tr></thead>
+        <tbody></tbody>
+      </table>
+    </div>
+    <div>
+      <h2>Paintings pulled from SMK</h2>
+      <p class="muted">"Used" means the painting has been scheduled into rotation at some point (so it's excluded from future random picks). "Available" means it's still fair game.</p>
+      <table id="paintingsTable">
+        <thead><tr><th>Painting</th><th>Fetched</th><th>Status</th></tr></thead>
+        <tbody></tbody>
+      </table>
+    </div>
   </section>
 </main>
 <script src="app.js"></script>

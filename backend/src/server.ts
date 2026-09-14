@@ -4,8 +4,9 @@ import path from "path";
 import { randomUUID } from "crypto";
 import { downloadImage, getPaintingByObjectNumber, pickRandomArtworks, searchPaintings, SmkArtwork } from "./smkClient";
 import { DEFAULT_SVG_OPTIONS, GenerateResult, generatePuzzle } from "./generate";
-import { ensurePainting, getNextDailyWindow, listSchedule, listUsedSmkObjectNumbers, publishPuzzle, scheduleRotation } from "./publish";
+import { ensurePainting, getNextRotationWindow, listPaintings, listSchedule, listUnscheduledPuzzles, listUsedSmkObjectNumbers, publishPuzzle, scheduleRotation } from "./publish";
 import { runDailyPreparation } from "./daily";
+import { getGeneratorConfig, updateGeneratorConfig } from "./config";
 import { Settings } from "../../src/settings";
 
 const app = express();
@@ -148,6 +149,19 @@ app.get("/api/schedule", async (_req, res) => {
     }
 });
 
+// One combined "what's the state of the world" endpoint for the admin panel: the
+// rotation schedule (past/active/upcoming — the UI itself computes which is which
+// relative to now), every painting pulled so far with its used/unused status, and any
+// puzzle that's been generated but never actually scheduled ("prepared but not used").
+app.get("/api/overview", async (_req, res) => {
+    try {
+        const [schedule, paintings, unscheduled] = await Promise.all([listSchedule(), listPaintings(), listUnscheduledPuzzles()]);
+        res.json({ schedule, paintings, unscheduled, now: new Date().toISOString() });
+    } catch (err) {
+        res.status(500).json({ error: (err as Error).message });
+    }
+});
+
 app.post("/api/daily/run", async (_req, res) => {
     try {
         res.json(await runDailyPreparation());
@@ -156,15 +170,38 @@ app.post("/api/daily/run", async (_req, res) => {
     }
 });
 
-const DAY_MS = 24 * 60 * 60 * 1000;
+app.get("/api/config", async (_req, res) => {
+    try {
+        res.json(await getGeneratorConfig());
+    } catch (err) {
+        res.status(500).json({ error: (err as Error).message });
+    }
+});
 
-// Self-sustaining supply of puzzles: on startup and then once a day, check whether the
-// rotation schedule currently covers "now" and, if not, pick+generate+publish+schedule a
-// new one. Checking coverage (rather than unconditionally running every interval tick)
-// keeps this idempotent across restarts and manual publishes within the same day.
+app.put("/api/config", async (req, res) => {
+    try {
+        res.json(await updateGeneratorConfig(req.body || {}));
+    } catch (err) {
+        res.status(500).json({ error: (err as Error).message });
+    }
+});
+
+// How often the server checks whether a new puzzle needs preparing — deliberately not
+// tied to the puzzle cadence itself (generator_config's cadence_days, e.g. 7 for
+// weekly), so that lowering the cadence or flipping "enabled" back on in the admin panel
+// takes effect within the hour instead of waiting up to a full cadence period.
+const COVERAGE_CHECK_INTERVAL_MS = 60 * 60 * 1000;
+
+// Self-sustaining supply of puzzles: on startup and then on the interval above, check
+// whether the rotation schedule currently covers "now" and, if not, pick+generate+
+// publish+schedule a new one. Checking coverage (rather than unconditionally running
+// every interval tick) keeps this idempotent across restarts and manual publishes within
+// the same window. Skipped entirely while automation is disabled in generator_config.
 async function ensureDailyPuzzleCoverage(): Promise<void> {
     try {
-        const window = await getNextDailyWindow();
+        const config = await getGeneratorConfig();
+        if (!config.enabled) return;
+        const window = await getNextRotationWindow(config.cadenceDays);
         if (window.coversNow) return;
         console.log("No puzzle currently scheduled — preparing one now.");
         const result = await runDailyPreparation();
@@ -178,5 +215,5 @@ const port = Number(process.env.PORT || 4000);
 app.listen(port, () => {
     console.log(`Paint-by-numbers control panel: http://127.0.0.1:${port}`);
     ensureDailyPuzzleCoverage();
-    setInterval(ensureDailyPuzzleCoverage, DAY_MS);
+    setInterval(ensureDailyPuzzleCoverage, COVERAGE_CHECK_INTERVAL_MS);
 });

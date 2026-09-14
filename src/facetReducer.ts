@@ -78,6 +78,46 @@ export class FacetReducer {
         }
     }
 
+    /**
+     *  Caps how many separate facets may share the same color, so one color doesn't end up
+     *  covering e.g. 150 small scattered regions. For each color over the cap, repeatedly
+     *  deletes that color's smallest facet (merging its points into the nearest neighbour,
+     *  same mechanism as reduceFacets) until it's at or under the limit. No-op when
+     *  maxFacetsPerColor <= 0 (unlimited).
+     */
+    public static async capFacetsPerColor(maxFacetsPerColor: number, colorsByIndex: RGB[], facetResult: FacetResult, imgColorIndices: Uint8Array2D, onUpdate: ((progress: number) => void) | null = null) {
+        if (maxFacetsPerColor <= 0) {
+            return;
+        }
+
+        const visitedCache = new BooleanArray2D(facetResult.width, facetResult.height);
+        const colorDistances: number[][] = ColorReducer.buildColorDistanceMatrix(colorsByIndex);
+
+        let curTime = new Date().getTime();
+
+        for (let color = 0; color < colorsByIndex.length; color++) {
+            let facetsOfColor = facetResult.facets.filter((f) => f != null && f.color === color) as Facet[];
+            while (facetsOfColor.length > maxFacetsPerColor) {
+                // remove the smallest facet of this color first, so the cap prefers keeping
+                // the larger, more visually significant regions of the color
+                facetsOfColor.sort((a, b) => a.pointCount - b.pointCount);
+                const smallest = facetsOfColor[0];
+                FacetReducer.deleteFacet(smallest.id, facetResult, imgColorIndices, colorDistances, visitedCache);
+                // re-evaluate: deleting a facet can merge/shrink/remove others of this color too
+                facetsOfColor = facetResult.facets.filter((f) => f != null && f.color === color) as Facet[];
+
+                if (new Date().getTime() - curTime > 500) {
+                    curTime = new Date().getTime();
+                    await delay(0);
+                }
+            }
+
+            if (onUpdate != null) {
+                onUpdate((color + 1) / colorsByIndex.length);
+            }
+        }
+    }
+
     // /**
     //  * Trims facets with narrow paths either horizontally or vertically, potentially splitting the facet into multiple facets
     //  */
