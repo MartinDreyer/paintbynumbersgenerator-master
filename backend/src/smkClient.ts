@@ -10,6 +10,10 @@ export interface SmkArtwork {
     artist: string | null;
     productionDate: string | null;
     imageUrl: string;
+    // Separate from imageUrl: image_native is a full-resolution (often 100MB+) download
+    // served with Content-Disposition: attachment, which browsers won't render inline in
+    // an <img> — fine for generation (which wants full res) but not for list previews.
+    thumbnailUrl: string;
     imageWidth: number | null;
     imageHeight: number | null;
 }
@@ -36,6 +40,7 @@ function mapItem(item: SmkSearchItem): SmkArtwork | null {
         artist: item.artist?.[0] || null,
         productionDate: item.production_date?.[0]?.period || null,
         imageUrl,
+        thumbnailUrl: item.image_thumbnail || imageUrl,
         imageWidth: item.image_width || null,
         imageHeight: item.image_height || null,
     };
@@ -44,8 +49,13 @@ function mapItem(item: SmkSearchItem): SmkArtwork | null {
 /** Search public-domain Danish paintings. `keys` is a free-text query (e.g. artist or title fragment). */
 export async function searchPaintings(keys: string, rows = 20, offset = 0): Promise<{ found: number; items: SmkArtwork[] }> {
     const params = new URLSearchParams({
-        keys: keys || "maleri",
-        filters: "[public_domain:true],[has_image:true],[creator_nationality:Danish]",
+        // "*" rather than a free-text "maleri" ("painting") query — free text matched anything
+        // whose description merely *mentioned* the word, pulling in studies/sketches ("Sketch
+        // for the painting..."). object_names:Painting + on_display:true instead restricts to
+        // paintings SMK's curators actually have hanging on a wall, which is a much better
+        // proxy for "a painting visitors would recognize" than free text ever was.
+        keys: keys || "*",
+        filters: "[public_domain:true],[has_image:true],[creator_nationality:Danish],[object_names:Painting],[on_display:true]",
         rows: String(rows),
         offset: String(offset),
         lang: "en",
@@ -84,7 +94,7 @@ export async function downloadImage(imageUrl: string): Promise<{ buffer: Buffer;
  * than paging through everything — cheap regardless of how large the collection is.
  */
 export async function pickRandomArtworks(excludeObjectNumbers: Set<string>, count: number): Promise<SmkArtwork[]> {
-    const probe = await searchPaintings("maleri", 1, 0);
+    const probe = await searchPaintings("*", 1, 0);
     if (probe.found === 0) return [];
 
     const picked: SmkArtwork[] = [];
@@ -92,7 +102,7 @@ export async function pickRandomArtworks(excludeObjectNumbers: Set<string>, coun
     const maxAttempts = count * 8;
     for (let attempt = 0; attempt < maxAttempts && picked.length < count; attempt++) {
         const offset = Math.floor(Math.random() * probe.found);
-        const { items } = await searchPaintings("maleri", 1, offset);
+        const { items } = await searchPaintings("*", 1, offset);
         const item = items[0];
         if (!item || excludeObjectNumbers.has(item.objectNumber) || pickedNumbers.has(item.objectNumber)) continue;
         pickedNumbers.add(item.objectNumber);
