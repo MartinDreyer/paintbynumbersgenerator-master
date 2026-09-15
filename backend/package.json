@@ -9,6 +9,7 @@
     "dev": "tsc && node dist/backend/src/server.js"
   },
   "dependencies": {
+    "@anthropic-ai/sdk": "^0.125.0",
     "@supabase/supabase-js": "^2.45.0",
     "canvas": "^3.2.3",
     "dotenv": "^16.4.5",

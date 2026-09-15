@@ -1,6 +1,7 @@
 import { PUZZLES_BUCKET, supabase } from "./supabaseClient";
 import { SmkArtwork } from "./smkClient";
 import { GenerateResult } from "./generate";
+import { generatePaintingBlurb } from "./enrichment";
 import { Settings } from "../../src/settings";
 
 /**
@@ -36,6 +37,16 @@ export async function ensurePainting(artwork: SmkArtwork): Promise<{ id: string 
         .select("id")
         .single();
     if (error) throw error;
+
+    // Best-effort, non-fatal: a new painting is worth enriching once, but a missing
+    // ANTHROPIC_API_KEY or a failed request must never block publishing the puzzle
+    // (generatePaintingBlurb already catches its own errors and returns null).
+    const blurb = await generatePaintingBlurb(artwork.title, artwork.artist);
+    if (blurb) {
+        const { error: blurbError } = await supabase.from("paintings").update({ ai_summary: blurb }).eq("id", data.id);
+        if (blurbError) console.error("Failed to save painting blurb (non-fatal):", blurbError);
+    }
+
     return data;
 }
 
