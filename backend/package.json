@@ -6,7 +6,8 @@
   "scripts": {
     "build": "tsc",
     "start": "node dist/backend/src/server.js",
-    "dev": "tsc && node dist/backend/src/server.js"
+    "dev": "tsc && node dist/backend/src/server.js",
+    "backfill-thumbnails": "tsc && node dist/backend/src/backfillThumbnails.js"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.125.0",

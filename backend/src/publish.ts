@@ -1,8 +1,33 @@
+import * as canvas from "canvas";
 import { PUZZLES_BUCKET, supabase } from "./supabaseClient";
 import { SmkArtwork } from "./smkClient";
 import { GenerateResult } from "./generate";
 import { generatePaintingBlurb } from "./enrichment";
 import { Settings } from "../../src/settings";
+
+// Longest edge of the generated reference thumbnail, in px. SMK originals run up to
+// several thousand px (and ~19MB); this only needs to be big enough for the app's
+// history/archive grid tiles, which are a few hundred CSS px square at most.
+const THUMBNAIL_MAX_DIMENSION = 320;
+const THUMBNAIL_JPEG_QUALITY = 0.82;
+
+// Also returns the source image's own pixel dimensions (reference_width/height —
+// see pnb-database's puzzle_reference_dimensions migration) as a side effect of the
+// decode this already has to do, rather than making callers decode the image a second
+// time just to learn its aspect ratio.
+export async function createThumbnail(imageBuffer: Buffer): Promise<{ buffer: Buffer; sourceWidth: number; sourceHeight: number }> {
+    const img = await canvas.loadImage(imageBuffer);
+    const scale = Math.min(1, THUMBNAIL_MAX_DIMENSION / Math.max(img.width, img.height));
+    const width = Math.max(1, Math.round(img.width * scale));
+    const height = Math.max(1, Math.round(img.height * scale));
+
+    const c = canvas.createCanvas(width, height);
+    const ctx = c.getContext("2d")!;
+    ctx.drawImage(img, 0, 0, width, height);
+
+    const buffer = c.toBuffer("image/jpeg", { quality: THUMBNAIL_JPEG_QUALITY });
+    return { buffer, sourceWidth: img.width, sourceHeight: img.height };
+}
 
 /**
  * Paintings whose puzzle has actually been scheduled into rotation (i.e. shown, or
@@ -65,7 +90,9 @@ export interface PublishPuzzleInput {
     status: "draft" | "published";
 }
 
-export async function publishPuzzle(input: PublishPuzzleInput): Promise<{ id: string; svgStoragePath: string; referencePngStoragePath: string }> {
+export async function publishPuzzle(
+    input: PublishPuzzleInput,
+): Promise<{ id: string; svgStoragePath: string; referencePngStoragePath: string; referenceThumbnailStoragePath: string }> {
     const { data: puzzleRow, error: insertError } = await supabase
         .from("puzzles")
         .insert({
@@ -74,6 +101,7 @@ export async function publishPuzzle(input: PublishPuzzleInput): Promise<{ id: st
             palette: input.generated.palette.map((p) => ({ num: p.index, rgb: p.color })),
             svg_storage_path: "",
             reference_png_storage_path: "",
+            reference_thumbnail_storage_path: "",
             status: input.status,
         })
         .select("id")
@@ -84,6 +112,9 @@ export async function publishPuzzle(input: PublishPuzzleInput): Promise<{ id: st
     const svgPath = `${puzzleId}/puzzle.svg`;
     const refExt = inferExtension(input.referenceImage.contentType);
     const refPath = `${puzzleId}/reference.${refExt}`;
+    const thumbPath = `${puzzleId}/thumbnail.jpg`;
+
+    const { buffer: thumbnailBuffer, sourceWidth, sourceHeight } = await createThumbnail(input.referenceImage.buffer);
 
     const { error: svgUploadError } = await supabase.storage
         .from(PUZZLES_BUCKET)
@@ -95,13 +126,24 @@ export async function publishPuzzle(input: PublishPuzzleInput): Promise<{ id: st
         .upload(refPath, input.referenceImage.buffer, { contentType: input.referenceImage.contentType, upsert: true });
     if (refUploadError) throw refUploadError;
 
+    const { error: thumbUploadError } = await supabase.storage
+        .from(PUZZLES_BUCKET)
+        .upload(thumbPath, thumbnailBuffer, { contentType: "image/jpeg", upsert: true });
+    if (thumbUploadError) throw thumbUploadError;
+
     const { error: updateError } = await supabase
         .from("puzzles")
-        .update({ svg_storage_path: svgPath, reference_png_storage_path: refPath })
+        .update({
+            svg_storage_path: svgPath,
+            reference_png_storage_path: refPath,
+            reference_thumbnail_storage_path: thumbPath,
+            reference_width: sourceWidth,
+            reference_height: sourceHeight,
+        })
         .eq("id", puzzleId);
     if (updateError) throw updateError;
 
-    return { id: puzzleId, svgStoragePath: svgPath, referencePngStoragePath: refPath };
+    return { id: puzzleId, svgStoragePath: svgPath, referencePngStoragePath: refPath, referenceThumbnailStoragePath: thumbPath };
 }
 
 export interface ScheduleInput {
