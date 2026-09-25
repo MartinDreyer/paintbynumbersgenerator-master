@@ -1,0 +1,17 @@
+services:
+  backend:
+    build: .
+    ports:
+      - "4000:4000"
+    env_file:
+      - backend/.env
+    environment:
+      # backend/.env's SUPABASE_URL is 127.0.0.1, which inside the container refers to
+      # the container itself, not the host running `supabase start`. Override it to
+      # reach the host's published port instead.
+      SUPABASE_URL: http://host.docker.internal:54331
+    extra_hosts:
+      # host.docker.internal is built into Docker Desktop (Mac/Windows); this mapping
+      # makes the same name work if this is ever run under Docker on Linux too.
+      - "host.docker.internal:host-gateway"
+    restart: unless-stopped
